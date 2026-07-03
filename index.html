@@ -760,13 +760,16 @@ async function saveCard() {
       'letter-spacing:' + cs.letterSpacing,
       'line-height:' + cs.lineHeight,
       'width:' + cs.width,
-      'min-height:' + cs.height,
+      'height:' + cs.height,
       'padding:' + cs.padding,
       'white-space:pre-wrap',
       'word-break:break-all',
       'vertical-align:middle',
+      'border:' + cs.border,
       'border-bottom:' + cs.borderBottom,
-      'background:transparent',
+      'background:' + cs.backgroundColor,
+      'box-sizing:border-box',
+
     ].join(';');
     el.parentNode.insertBefore(span, el);
     el.remove();
