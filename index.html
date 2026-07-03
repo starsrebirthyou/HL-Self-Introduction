@@ -708,6 +708,8 @@ async function saveCard() {
 
   // 카드 복제
   const clone = card.cloneNode(true);
+  const exportScopeId = 'pngExportClone_' + Date.now();
+  clone.id = exportScopeId;
   clone.style.cssText = [
     'position:fixed',
     'top:-9999px',
@@ -721,25 +723,55 @@ async function saveCard() {
   // "C:\fakepath\..." 값이 그대로 이미지에 찍히는 원인이 되므로 통째로 제거
   clone.querySelectorAll('input[type="file"]').forEach(el => el.remove());
 
-  // 복제본 안의 모바일 스타일 강제 해제 — PC 레이아웃 주입
+  // 복제본 전용 스타일 — 반드시 #${exportScopeId}로 범위를 한정해야 함.
+  // <style> 태그는 DOM 트리 어디에 붙어있든 상관없이 문서 전체에 전역 적용되므로,
+  // 스코프를 안 걸면 저장 버튼을 누르는 순간 실제 화면(원본 카드)에도
+  // 이 스타일이 그대로 새어 들어가 레이아웃이 잠깐 깨져 보이는 문제가 생김.
   const overrideStyle = document.createElement('style');
+  const scope = '#' + exportScopeId;
   overrideStyle.textContent = `
-    .hdr-row { display: grid !important; grid-template-columns: 3fr 7fr !important; }
-    .hdr-avatar-cell { border-right: 1px solid var(--rule) !important; border-bottom: none !important; flex-direction: column !important; justify-content: center !important; }
-    .hdr-info-cell { padding: 14px 18px !important; }
-    .hdr-nick { font-size: 22px !important; }
-    .hdr-meta { flex-direction: row !important; align-items: stretch !important; gap: 0 !important; }
-    .hdr-meta-item { align-items: center !important; }
-    .hdr-meta-item.age { flex: 3 !important; padding-right: 10px !important; padding-bottom: 3px !important; border-right: 1px solid var(--tint) !important; border-bottom: none !important; width: auto !important; }
-    .hdr-meta-item.platform { flex: 7 !important; padding-left: 10px !important; padding-bottom: 3px !important; border-bottom: none !important; width: auto !important; }
-    .hdr-meta-input { flex: 1 !important; width: 0 !important; }
-    .body-cols { display: grid !important; grid-template-columns: 168px 1fr 1fr !important; }
-    .col { border-right: 1px solid var(--rule) !important; border-bottom: none !important; }
-    .col:last-child { border-right: none !important; }
-    .footer { flex-direction: row !important; align-items: center !important; }
-    .footer-tag-input { width: 320px !important; }
+    ${scope} .hdr-row { display: grid !important; grid-template-columns: 3fr 7fr !important; }
+    ${scope} .hdr-avatar-cell { border-right: 1px solid var(--rule) !important; border-bottom: none !important; flex-direction: column !important; justify-content: center !important; }
+    ${scope} .hdr-info-cell { padding: 14px 18px !important; }
+    ${scope} .hdr-nick { font-size: 22px !important; }
+    ${scope} .hdr-meta { flex-direction: row !important; align-items: stretch !important; gap: 0 !important; }
+    ${scope} .hdr-meta-item { align-items: center !important; }
+    ${scope} .hdr-meta-item.age { flex: 4 !important; padding: 0 10px 0 0 !important; border-right: 1px solid var(--tint) !important; border-bottom: none !important; width: auto !important; }
+    ${scope} .hdr-meta-item.platform { flex: 6 !important; padding-left: 10px !important; padding-bottom: 3px !important; border-bottom: none !important; width: auto !important; }
+    ${scope} .hdr-meta-input { flex: 1 !important; width: 0 !important; }
+    ${scope} .body-cols { display: grid !important; grid-template-columns: 168px 1fr 1fr !important; }
+    ${scope} .col { border-right: 1px solid var(--rule) !important; border-bottom: none !important; }
+    ${scope} .col:last-child { border-right: none !important; }
+    ${scope} .footer { flex-direction: row !important; align-items: center !important; }
+    ${scope} .footer-tag-input { width: 320px !important; }
   `;
   clone.appendChild(overrideStyle);
+
+  // html2canvas는 flex-wrap으로 두 줄이 된 요소를 align-items:center로
+  // 세로 중앙정렬하는 계산을 정확히 못 해서(라벨이 위로 붙어버림),
+  // "연령대" 항목만 table/table-cell 구조로 바꿔서 확실하게 중앙정렬되게 함
+  (function fixAgeVerticalAlign() {
+    const ageItem = clone.querySelector('.hdr-meta-item.age');
+    if (!ageItem) return;
+    const label = ageItem.querySelector('.hdr-meta-label');
+    const cklist = ageItem.querySelector('.cklist');
+    if (!label || !cklist) return;
+
+    ageItem.style.display = 'table';
+    ageItem.style.width = '100%';
+
+    label.style.display = 'table-cell';
+    label.style.verticalAlign = 'middle';
+    label.style.paddingRight = '6px';
+
+    // cklist 자체의 display는 flex를 유지해야 체크박스들이 줄바꿈되므로,
+    // cklist를 새 table-cell 래퍼로 감싸기만 함 (cklist 자체는 건드리지 않음)
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'table-cell';
+    wrapper.style.verticalAlign = 'middle';
+    cklist.parentNode.insertBefore(wrapper, cklist);
+    wrapper.appendChild(cklist);
+  })();
 
   // input/textarea 값 span으로 교체 (글자 꺼짐 방지)
   // 주의: type="file" 인풋은 제외해야 함 (위에서 이미 clone에서는 제거했지만
