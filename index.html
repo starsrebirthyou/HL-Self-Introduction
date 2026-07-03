@@ -74,6 +74,28 @@ body {
   font-family: 'Noto Sans KR', sans-serif;
 }
 .btn-save:hover { background: #f0ece8; }
+.autosave-status {
+  font-size: 10px;
+  color: #7a8a70;
+  font-family: 'Noto Sans KR', sans-serif;
+  opacity: 0;
+  transition: opacity .3s;
+  white-space: nowrap;
+}
+.autosave-status.show { opacity: 1; }
+.btn-reset {
+  padding: 6px 14px;
+  border: 1px solid #b88;
+  background: #fff;
+  color: #a03030;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+.btn-reset:hover { background: #fdf0f0; }
 
 /* ── 카드 전체 ── */
 #card {
@@ -346,6 +368,8 @@ body {
     <div class="tdot"     data-t="mono"     title="모노"></div>
   </div>
   <button class="btn-save" onclick="saveCard()">↓ PNG 저장</button>
+  <span class="autosave-status" id="autosaveStatus"></span>
+  <button class="btn-reset" id="resetBtn" title="저장된 내용을 모두 지웁니다">초기화</button>
 </div>
 
 <!-- ── 카드 ── -->
@@ -551,6 +575,131 @@ document.getElementById('avatarInput').addEventListener('change', function () {
     document.getElementById('avatarHint').style.display = 'none';
   };
   r.readAsDataURL(f);
+});
+
+// ── 로컬 저장 (localStorage) ──
+const LS_KEY = 'heteroCardData_v1';
+
+function getFieldEls() {
+  // 아바타 파일 인풋은 제외, 그 외 카드 안의 input/textarea 전부
+  return Array.from(document.querySelectorAll('#card input:not(#avatarInput), #card textarea'));
+}
+function getCkEls() {
+  return Array.from(document.querySelectorAll('#card .ck'));
+}
+
+function collectData() {
+  const activeTdot = document.querySelector('.tdot.on');
+  const avatarImg = document.getElementById('avatarImg');
+  return {
+    theme: activeTdot ? activeTdot.dataset.t : 'default',
+    avatar: avatarImg.style.display === 'block' ? avatarImg.src : '',
+    fields: getFieldEls().map(el => el.value),
+    checks: getCkEls().map(ck => ck.classList.contains('on')),
+  };
+}
+
+function applyData(data) {
+  if (!data) return;
+
+  // 테마
+  if (data.theme) {
+    const dot = document.querySelector('.tdot[data-t="' + data.theme + '"]');
+    if (dot) {
+      document.querySelectorAll('.tdot').forEach(x => x.classList.remove('on'));
+      dot.classList.add('on');
+      const card = document.getElementById('card');
+      card.className = '';
+      if (data.theme !== 'default') card.classList.add('t-' + data.theme);
+    }
+  }
+
+  // 아바타
+  if (data.avatar) {
+    const img = document.getElementById('avatarImg');
+    img.src = data.avatar;
+    img.style.display = 'block';
+    document.getElementById('avatarHint').style.display = 'none';
+  }
+
+  // 입력 필드
+  const fieldEls = getFieldEls();
+  if (Array.isArray(data.fields)) {
+    fieldEls.forEach((el, i) => {
+      if (typeof data.fields[i] === 'string') el.value = data.fields[i];
+    });
+  }
+
+  // 체크박스
+  const ckEls = getCkEls();
+  if (Array.isArray(data.checks)) {
+    ckEls.forEach((ck, i) => {
+      ck.classList.toggle('on', !!data.checks[i]);
+    });
+  }
+}
+
+function saveToLocalStorage() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(collectData()));
+    showAutosaveStatus();
+  } catch (e) {
+    // 용량 초과 등 저장 실패 시 조용히 무시 (아바타 이미지가 너무 클 수 있음)
+    console.warn('로컬 저장 실패:', e);
+  }
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    applyData(JSON.parse(raw));
+  } catch (e) {
+    console.warn('로컬 데이터 불러오기 실패:', e);
+  }
+}
+
+let autosaveTimer = null;
+function showAutosaveStatus() {
+  const el = document.getElementById('autosaveStatus');
+  el.textContent = '자동 저장됨';
+  el.classList.add('show');
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => el.classList.remove('show'), 1400);
+}
+
+let debounceTimer = null;
+function scheduleSave() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(saveToLocalStorage, 400);
+}
+
+// 페이지 로드 시 복원
+loadFromLocalStorage();
+
+// 입력 필드 변경 시 자동 저장
+document.addEventListener('input', e => {
+  if (e.target.matches('#card input, #card textarea')) scheduleSave();
+});
+
+// 체크박스, 테마 변경 시 자동 저장 (기존 클릭 핸들러 뒤에 저장 트리거)
+document.querySelectorAll('.ck').forEach(ck => {
+  ck.addEventListener('click', () => scheduleSave());
+});
+document.querySelectorAll('.tdot').forEach(d => {
+  d.addEventListener('click', () => scheduleSave());
+});
+
+// 아바타 업로드 시 자동 저장
+document.getElementById('avatarInput').addEventListener('change', () => {
+  setTimeout(scheduleSave, 100); // FileReader 비동기 완료 후 저장
+});
+
+// 초기화 버튼
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (!confirm('저장된 모든 내용을 삭제하고 새로 시작할까요?')) return;
+  localStorage.removeItem(LS_KEY);
+  location.reload();
 });
 
 // PNG 저장 — 항상 PC 가로 버전(860px)으로 캡처
