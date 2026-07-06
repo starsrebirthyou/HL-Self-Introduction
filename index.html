@@ -193,7 +193,7 @@ body {
 .hdr-intro {
   width: 100%; border: 1px solid var(--tint); background: var(--tint2); border-radius: 0;
   outline: none; font-family: 'Noto Sans KR', sans-serif; font-size: 11px; color: var(--ink);
-  padding: 7px 9px; resize: none; line-height: 1.7;
+  padding: 7px 9px; resize: none; line-height: 1.7; overflow: hidden;
 }
 .hdr-intro::placeholder { color: var(--muted); opacity: .7; }
 
@@ -255,7 +255,7 @@ body {
   background: var(--tint2); font-family: 'Noto Sans KR', sans-serif;
   font-size: 11px; color: var(--ink); padding: 7px 9px;
   outline: none; resize: none; line-height: 1.9;
-  min-height: 52px;
+  min-height: 52px; overflow: hidden;
 }
 .blk-ta:focus { border-color: var(--accent); }
 
@@ -282,7 +282,7 @@ body {
 .wide-ta {
   width: 100%; border: none; background: transparent;
   font-family: 'Noto Sans KR', sans-serif; font-size: 12px; color: var(--ink);
-  outline: none; resize: none; line-height: 1.9; min-height: 52px;
+  outline: none; resize: none; line-height: 1.9; min-height: 52px; overflow: hidden;
 }
 .wide-ta:focus { outline: none; }
 
@@ -539,7 +539,6 @@ body {
 
   <!-- 푸터 -->
   <div class="footer">
-    <input class="footer-tag-input" maxlength="80">
     <div class="footer-badge">헤테로 자기소개표</div>
   </div>
 
@@ -547,6 +546,18 @@ body {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
+// ── textarea 자동 높이 ──
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+function initAutoResize() {
+  document.querySelectorAll('#card textarea').forEach(ta => {
+    autoResize(ta);
+    ta.addEventListener('input', () => autoResize(ta));
+  });
+}
+
 // 테마
 const themes = ['default','rose','lavender','mint','peach','mono'];
 document.querySelectorAll('.tdot').forEach(d => {
@@ -627,6 +638,7 @@ function applyData(data) {
   if (Array.isArray(data.fields)) {
     fieldEls.forEach((el, i) => {
       if (typeof data.fields[i] === 'string') el.value = data.fields[i];
+      if (el.tagName.toLowerCase() === 'textarea') autoResize(el);
     });
   }
 
@@ -676,6 +688,9 @@ function scheduleSave() {
 
 // 페이지 로드 시 복원
 loadFromLocalStorage();
+
+// auto-resize 초기화 (복원 후)
+initAutoResize();
 
 // 입력 필드 변경 시 자동 저장
 document.addEventListener('input', e => {
@@ -782,6 +797,9 @@ async function saveCard() {
     const orig = origInputs[i];
     const val = orig ? orig.value : el.value;
     const cs = window.getComputedStyle(orig || el);
+    // textarea는 실제 렌더된 높이(scrollHeight)를 사용, input은 css height 사용
+    const isTextarea = (orig || el).tagName.toLowerCase() === 'textarea';
+    const actualHeight = isTextarea && orig ? orig.scrollHeight + 'px' : cs.height;
     const span = document.createElement('span');
     span.textContent = val;
     span.style.cssText = [
@@ -793,16 +811,15 @@ async function saveCard() {
       'letter-spacing:' + cs.letterSpacing,
       'line-height:' + cs.lineHeight,
       'width:' + cs.width,
-      'height:' + cs.height,
+      'height:' + actualHeight,
       'padding:' + cs.padding,
       'white-space:pre-wrap',
       'word-break:break-all',
-      'vertical-align:middle',
+      'vertical-align:top',
       'border:' + cs.border,
       'border-bottom:' + cs.borderBottom,
       'background:' + cs.backgroundColor,
       'box-sizing:border-box',
-
     ].join(';');
     el.parentNode.insertBefore(span, el);
     el.remove();
